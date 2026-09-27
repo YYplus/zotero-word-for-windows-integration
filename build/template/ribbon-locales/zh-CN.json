@@ -1,0 +1,37 @@
+{
+  "locale": "zh-CN",
+  "officeLanguageIDs": [
+    2052,
+    4100
+  ],
+  "controls": {
+    "InsertZoteroCitationButton": {
+      "label": "添加/编辑引注",
+      "supertip": "在当前光标位置插入新引注，或编辑现有引注"
+    },
+    "InsertZoteroBibliographyButton": {
+      "label": "添加/编辑参考文献表",
+      "supertip": "在当前光标位置插入新的参考文献表，或编辑现有参考文献表"
+    },
+    "InsertZoteroAnnotationButton": {
+      "label": "添加注释",
+      "supertip": "在当前光标位置插入注释"
+    },
+    "InsertZoteroNoteButton": {
+      "label": "添加笔记",
+      "supertip": "在当前光标位置插入新笔记"
+    },
+    "ZoteroSetDocPrefs": {
+      "label": "文档首选项",
+      "supertip": "更改引注样式或语言"
+    },
+    "RefreshZotero": {
+      "label": "刷新",
+      "supertip": "更新所有引注以反映更改"
+    },
+    "ZoteroRemoveCodes": {
+      "label": "取消链接引注",
+      "supertip": "移除所有 Zotero 域代码并取消与 Zotero 文献库的链接"
+    }
+  }
+}
