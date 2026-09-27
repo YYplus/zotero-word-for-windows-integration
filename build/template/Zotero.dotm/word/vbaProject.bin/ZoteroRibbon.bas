@@ -51,6 +51,48 @@ Sub ZoteroRibbonRemoveCodes(button As IRibbonControl)
     Call ZoteroRemoveCodes
 End Sub
 
+Private Function ZoteroRibbonUsesSimplifiedChinese() As Boolean
+    Dim languageID As Long
+    On Error Resume Next
+    ' 2 = msoLanguageIDUI. Use the numeric value to avoid adding a dependency
+    ' on a particular Office type-library version.
+    languageID = Application.LanguageSettings.LanguageID(2)
+    On Error GoTo 0
+
+    ' 2052 = zh-CN; 4100 = zh-SG
+    ZoteroRibbonUsesSimplifiedChinese = (languageID = 2052 Or languageID = 4100)
+End Function
+
+Private Function ZoteroRibbonTagPart(control As IRibbonControl, partIndex As Long) As String
+    Dim parts() As String
+    If Len(control.Tag) = 0 Then Exit Function
+
+    ' Tag format:
+    ' English label || Simplified Chinese label || English supertip || Simplified Chinese supertip
+    parts = Split(control.Tag, "||")
+    If partIndex >= LBound(parts) And partIndex <= UBound(parts) Then
+        ZoteroRibbonTagPart = parts(partIndex)
+    End If
+End Function
+
+Sub ZoteroRibbonGetLabel(control As IRibbonControl, ByRef returnedVal)
+    If ZoteroRibbonUsesSimplifiedChinese() Then
+        returnedVal = ZoteroRibbonTagPart(control, 1)
+        If Len(returnedVal) > 0 Then Exit Sub
+    End If
+
+    returnedVal = ZoteroRibbonTagPart(control, 0)
+End Sub
+
+Sub ZoteroRibbonGetSupertip(control As IRibbonControl, ByRef returnedVal)
+    If ZoteroRibbonUsesSimplifiedChinese() Then
+        returnedVal = ZoteroRibbonTagPart(control, 3)
+        If Len(returnedVal) > 0 Then Exit Sub
+    End If
+
+    returnedVal = ZoteroRibbonTagPart(control, 2)
+End Sub
+
 Sub ZoteroTabLabel(tb As IRibbonControl, ByRef returnedVal)
     Dim ver As Double
     ver = Val(Application.Version)
