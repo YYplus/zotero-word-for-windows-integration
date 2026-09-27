@@ -54,9 +54,7 @@ End Sub
 Private Function ZoteroRibbonUsesSimplifiedChinese() As Boolean
     Dim languageID As Long
     On Error Resume Next
-    ' 2 = msoLanguageIDUI. Use the numeric value to avoid adding a dependency
-    ' on a particular Office type-library version.
-    languageID = Application.LanguageSettings.LanguageID(2)
+    languageID = Application.LanguageSettings.LanguageID(msoLanguageIDUI)
     On Error GoTo 0
 
     ' 2052 = zh-CN; 4100 = zh-SG
