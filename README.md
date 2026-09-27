@@ -1,5 +1,33 @@
 # Zotero Word for Windows Integration
 
+> Unofficial fork of [`zotero/zotero-word-for-windows-integration`](https://github.com/zotero/zotero-word-for-windows-integration) with localized Word Ribbon support. This is not an official Zotero release.
+
+## Ribbon localization fork
+
+This fork adds localization support for the Zotero Word Ribbon labels and supertips without changing document content or citation behavior.
+
+Current behavior:
+
+- Simplified Chinese (`zh-CN`) is included.
+- Office UI language IDs `2052` and `4100` map to `zh-CN`.
+- The active locale is selected from Word's UI language via `msoLanguageIDUI`.
+- Unsupported languages fall back to the original English Ribbon strings.
+- Locale data is stored separately from the VBA callbacks, so additional locales can be added without hardcoding translations in VBA.
+- The current `install/Zotero.dotm` has been compiled in Microsoft Word and tested through the Word `STARTUP` add-in path on Windows.
+
+The localization work is related to upstream issue [#18 — Localizations in Word](https://github.com/zotero/zotero-word-for-windows-integration/issues/18).
+
+### Install the localized template
+
+1. Close Microsoft Word.
+2. Back up `%APPDATA%\Microsoft\Word\STARTUP\Zotero.dotm` if it already exists.
+3. Replace it with [`install/Zotero.dotm`](install/Zotero.dotm).
+4. Start Word again.
+
+For localization source files and the build workflow, see [`build/template/ribbon-locales/README.md`](build/template/ribbon-locales/README.md).
+
+---
+
 This is a Zotero extension that consists of a library written in C++ that communicates with Microsoft Word out of process using OLE Automation, a js-ctypes wrapper for said library, and a template that is installed into Microsoft Word to communicate with Zotero.
 
 ## Development Setup
