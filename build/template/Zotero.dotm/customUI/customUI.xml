@@ -12,7 +12,7 @@
           <separator id="ZoteroSeparator2"/>
           <button id="ZoteroSetDocPrefs" getLabel="ZoteroRibbon.ZoteroRibbonGetLabel" image="zoteroDocPrefs" onAction="ZoteroRibbon.ZoteroRibbonSetDocPrefs" getSupertip="ZoteroRibbon.ZoteroRibbonGetSupertip" tag="Document Preferences||文档首选项||Change the citation style or locale||更改引注样式或语言" keytip="P"/>
           <button id="RefreshZotero" getLabel="ZoteroRibbon.ZoteroRibbonGetLabel" image="zoteroRefresh" onAction="ZoteroRibbon.ZoteroRibbonRefresh" getSupertip="ZoteroRibbon.ZoteroRibbonGetSupertip" tag="Refresh||刷新||Update all citations to reflect changes||更新所有引注以反映更改" keytip="R"/>
-          <button id="ZoteroRemoveCodes" getLabel="ZoteroRibbon.ZoteroRibbonGetLabel" image="zoteroRemoveCodes" onAction="ZoteroRibbon.ZoteroRibbonRemoveCodes" getSupertip="ZoteroRibbon.ZoteroRibbonGetSupertip" tag="Unlink Citations||断开引注链接||Remove all Zotero field codes and unlink from Zotero library||移除所有 Zotero 域代码并断开与 Zotero 文献库的链接" keytip="U"/>
+          <button id="ZoteroRemoveCodes" getLabel="ZoteroRibbon.ZoteroRibbonGetLabel" image="zoteroRemoveCodes" onAction="ZoteroRibbon.ZoteroRibbonRemoveCodes" getSupertip="ZoteroRibbon.ZoteroRibbonGetSupertip" tag="Unlink Citations||取消链接引注||Remove all Zotero field codes and unlink from Zotero library||移除所有 Zotero 域代码并断开与 Zotero 文献库的链接" keytip="U"/>
         </group>
       </tab>
     </tabs>
