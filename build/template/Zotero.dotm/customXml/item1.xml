@@ -1,0 +1,39 @@
+<?xml version='1.0' encoding='utf-8'?>
+<ribbonLocalization xmlns="http://www.zotero.org/ribbon-localization/v1" defaultLocale="en-US">
+  <languages>
+    <language officeLanguageID="2052" locale="zh-CN" />
+    <language officeLanguageID="4100" locale="zh-CN" />
+  </languages>
+  <locales>
+    <locale id="zh-CN">
+      <control id="InsertZoteroCitationButton">
+        <label>添加/编辑引注</label>
+        <supertip>在当前光标位置插入新引注，或编辑现有引注</supertip>
+      </control>
+      <control id="InsertZoteroBibliographyButton">
+        <label>添加/编辑参考文献表</label>
+        <supertip>在当前光标位置插入新的参考文献表，或编辑现有参考文献表</supertip>
+      </control>
+      <control id="InsertZoteroAnnotationButton">
+        <label>添加注释</label>
+        <supertip>在当前光标位置插入注释</supertip>
+      </control>
+      <control id="InsertZoteroNoteButton">
+        <label>添加笔记</label>
+        <supertip>在当前光标位置插入新笔记</supertip>
+      </control>
+      <control id="ZoteroSetDocPrefs">
+        <label>文档首选项</label>
+        <supertip>更改引注样式或语言</supertip>
+      </control>
+      <control id="RefreshZotero">
+        <label>刷新</label>
+        <supertip>更新所有引注以反映更改</supertip>
+      </control>
+      <control id="ZoteroRemoveCodes">
+        <label>取消链接引注</label>
+        <supertip>移除所有 Zotero 域代码并取消与 Zotero 文献库的链接</supertip>
+      </control>
+    </locale>
+  </locales>
+</ribbonLocalization>
