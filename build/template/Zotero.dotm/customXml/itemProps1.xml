@@ -1,6 +1,6 @@
-<?xml version='1.0' encoding='utf-8'?>
-<ds:dataStoreItem xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml" ds:itemID="{6F533F15-7F4D-47D7-96DF-919E748E3D85}">
+<?xml version="1.0" encoding="UTF-8"?>
+<ds:datastoreItem xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml" ds:itemID="{6F533F15-7F4D-47D7-96DF-919E748E3D85}">
   <ds:schemaRefs>
     <ds:schemaRef ds:uri="http://www.zotero.org/ribbon-localization/v1" />
   </ds:schemaRefs>
-</ds:dataStoreItem>
+</ds:datastoreItem>
