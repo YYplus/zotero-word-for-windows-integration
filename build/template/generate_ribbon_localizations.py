@@ -3,6 +3,7 @@ import argparse
 from collections import Counter
 import json
 import os
+import posixpath
 import re
 import shutil
 import tempfile
@@ -366,23 +367,155 @@ def validate_item_props(data, description):
     return root
 
 
-def validate_item_rels(data, description):
+def validate_relationships(data, description):
     root = parse_xml(data, description)
     if root.tag != f"{{{REL_NS}}}Relationships":
         raise ValueError(f"{description}: unexpected root element {root.tag!r}")
 
+    relationships = root.findall(f"{{{REL_NS}}}Relationship")
+    if len(relationships) != len(list(root)):
+        raise ValueError(f"{description}: contains unexpected child elements")
+
+    seen_ids = set()
+    for rel in relationships:
+        rel_id = rel.get("Id")
+        if not rel_id or rel_id != rel_id.strip() or any(c.isspace() for c in rel_id):
+            raise ValueError(f"{description}: relationship has missing or invalid Id")
+        if rel_id in seen_ids:
+            raise ValueError(f"{description}: duplicate relationship Id {rel_id!r}")
+        seen_ids.add(rel_id)
+
+        if not rel.get("Type"):
+            raise ValueError(f"{description}: relationship {rel_id!r} is missing Type")
+        if not rel.get("Target"):
+            raise ValueError(f"{description}: relationship {rel_id!r} is missing Target")
+        target_mode = rel.get("TargetMode")
+        if target_mode not in (None, "Internal", "External"):
+            raise ValueError(
+                f"{description}: relationship {rel_id!r} has invalid TargetMode "
+                f"{target_mode!r}"
+            )
+
+    return root, relationships
+
+
+def relationship_is_internal(rel):
+    return rel.get("TargetMode") in (None, "Internal")
+
+
+def validate_item_rels(data, description):
+    root, relationships = validate_relationships(data, description)
     prop_relationships = [
-        rel
-        for rel in root.findall(f"{{{REL_NS}}}Relationship")
-        if rel.get("Type") == CUSTOM_XML_PROPS_REL_TYPE
+        rel for rel in relationships if rel.get("Type") == CUSTOM_XML_PROPS_REL_TYPE
     ]
+    if len(prop_relationships) != 1:
+        raise ValueError(
+            f"{description}: expected exactly one customXmlProps relationship"
+        )
+
+    rel = prop_relationships[0]
+    if rel.get("Target") != "itemProps1.xml":
+        raise ValueError(
+            f"{description}: customXmlProps relationship must target itemProps1.xml"
+        )
+    if not relationship_is_internal(rel):
+        raise ValueError(
+            f"{description}: customXmlProps relationship must be internal"
+        )
+    return root
+
+
+def validate_document_rels(data, description, require_localization=False):
+    root, relationships = validate_relationships(data, description)
+    target = "../" + CUSTOM_XML_PART
+    matches = [
+        rel
+        for rel in relationships
+        if rel.get("Type") == CUSTOM_XML_REL_TYPE and rel.get("Target") == target
+    ]
+    if len(matches) > 1:
+        raise ValueError(
+            f"{description}: duplicate Ribbon localization relationships"
+        )
+    if require_localization:
+        if len(matches) != 1:
+            raise ValueError(
+                f"{description}: expected exactly one Ribbon localization relationship"
+            )
+        if not relationship_is_internal(matches[0]):
+            raise ValueError(
+                f"{description}: Ribbon localization relationship must be internal"
+            )
+    return root, relationships, matches
+
+
+def parse_content_types(data, description):
+    root = parse_xml(data, description)
+    if root.tag != f"{{{CONTENT_TYPES_NS}}}Types":
+        raise ValueError(f"{description}: unexpected root element {root.tag!r}")
+
+    defaults = {}
+    overrides = {}
+    for child in list(root):
+        if child.tag == f"{{{CONTENT_TYPES_NS}}}Default":
+            extension = child.get("Extension")
+            content_type = child.get("ContentType")
+            if not extension or not content_type:
+                raise ValueError(f"{description}: invalid Default content type entry")
+            key = extension.lower()
+            if key in defaults:
+                raise ValueError(
+                    f"{description}: duplicate Default entries for extension {extension!r}"
+                )
+            defaults[key] = child
+        elif child.tag == f"{{{CONTENT_TYPES_NS}}}Override":
+            part_name = child.get("PartName")
+            content_type = child.get("ContentType")
+            if not part_name or not part_name.startswith("/") or not content_type:
+                raise ValueError(f"{description}: invalid Override content type entry")
+            if part_name in overrides:
+                raise ValueError(
+                    f"{description}: duplicate Override entries for {part_name}"
+                )
+            overrides[part_name] = child
+        else:
+            raise ValueError(f"{description}: unexpected child element {child.tag!r}")
+
+    return root, defaults, overrides
+
+
+def resolve_content_type(defaults, overrides, part_name):
+    override = overrides.get(part_name)
+    if override is not None:
+        return override.get("ContentType")
+    filename = part_name.rsplit("/", 1)[-1]
+    if "." not in filename:
+        return None
+    extension = filename.rsplit(".", 1)[-1].lower()
+    default = defaults.get(extension)
+    return default.get("ContentType") if default is not None else None
+
+
+def validate_content_types(data, description):
+    root, defaults, overrides = parse_content_types(data, description)
+    data_part_name = "/" + CUSTOM_XML_PART
+    props_part_name = "/" + CUSTOM_XML_PROPS_PART
+
+    if resolve_content_type(defaults, overrides, data_part_name) != "application/xml":
+        raise ValueError(
+            f"{description}: {data_part_name} must resolve to application/xml"
+        )
     if (
-        len(prop_relationships) != 1
-        or prop_relationships[0].get("Target") != "itemProps1.xml"
+        resolve_content_type(defaults, overrides, props_part_name)
+        != CUSTOM_XML_PROPS_CONTENT_TYPE
     ):
         raise ValueError(
-            f"{description}: expected exactly one customXmlProps relationship "
-            "to itemProps1.xml"
+            f"{description}: {props_part_name} must resolve to "
+            f"{CUSTOM_XML_PROPS_CONTENT_TYPE}"
+        )
+    if props_part_name not in overrides:
+        raise ValueError(
+            f"{description}: {props_part_name} requires an explicit Override"
         )
     return root
 
@@ -394,24 +527,15 @@ def validate_generated_xml(localization_xml, item_props, item_rels):
 
 
 def update_document_rels(data):
-    root = parse_xml(data, DOCUMENT_RELS_PART)
-    target = "../" + CUSTOM_XML_PART
-    relationships = root.findall(f"{{{REL_NS}}}Relationship")
-
-    matches = [
-        rel
-        for rel in relationships
-        if rel.get("Type") == CUSTOM_XML_REL_TYPE and rel.get("Target") == target
-    ]
-    if len(matches) > 1:
-        raise ValueError(
-            f"{DOCUMENT_RELS_PART}: duplicate Ribbon localization relationships"
-        )
+    root, _, matches = validate_document_rels(data, DOCUMENT_RELS_PART)
     if len(matches) == 1:
+        matches[0].attrib.pop("TargetMode", None)
         return serialize(root)
 
     relationship_id = "rIdZoteroRibbonLocalization"
-    existing_ids = {rel.get("Id") for rel in relationships}
+    existing_ids = {
+        rel.get("Id") for rel in root.findall(f"{{{REL_NS}}}Relationship")
+    }
     suffix = 1
     while relationship_id in existing_ids:
         relationship_id = f"rIdZoteroRibbonLocalization{suffix}"
@@ -423,52 +547,98 @@ def update_document_rels(data):
         {
             "Id": relationship_id,
             "Type": CUSTOM_XML_REL_TYPE,
-            "Target": target,
+            "Target": "../" + CUSTOM_XML_PART,
         },
     )
-    return serialize(root)
+    result = serialize(root)
+    validate_document_rels(result, DOCUMENT_RELS_PART, require_localization=True)
+    return result
 
 
 def update_content_types(data):
-    root = parse_xml(data, CONTENT_TYPES_PART)
-    part_name = "/" + CUSTOM_XML_PROPS_PART
+    root, defaults, overrides = parse_content_types(data, CONTENT_TYPES_PART)
 
-    xml_defaults = [
-        node
-        for node in root.findall(f"{{{CONTENT_TYPES_NS}}}Default")
-        if node.get("Extension", "").lower() == "xml"
-    ]
-    if len(xml_defaults) > 1:
-        raise ValueError(f"{CONTENT_TYPES_PART}: duplicate xml Default entries")
-    if xml_defaults:
-        xml_defaults[0].set("ContentType", "application/xml")
-    else:
-        ET.SubElement(
+    xml_default = defaults.get("xml")
+    if xml_default is None:
+        xml_default = ET.SubElement(
             root,
             f"{{{CONTENT_TYPES_NS}}}Default",
             {"Extension": "xml", "ContentType": "application/xml"},
         )
-
-    overrides = [
-        node
-        for node in root.findall(f"{{{CONTENT_TYPES_NS}}}Override")
-        if node.get("PartName") == part_name
-    ]
-    if len(overrides) > 1:
-        raise ValueError(f"{CONTENT_TYPES_PART}: duplicate override for {part_name}")
-    if overrides:
-        overrides[0].set("ContentType", CUSTOM_XML_PROPS_CONTENT_TYPE)
+        defaults["xml"] = xml_default
     else:
-        ET.SubElement(
+        xml_default.set("ContentType", "application/xml")
+
+    data_part_name = "/" + CUSTOM_XML_PART
+    data_override = overrides.get(data_part_name)
+    if data_override is not None:
+        data_override.set("ContentType", "application/xml")
+
+    props_part_name = "/" + CUSTOM_XML_PROPS_PART
+    props_override = overrides.get(props_part_name)
+    if props_override is None:
+        props_override = ET.SubElement(
             root,
             f"{{{CONTENT_TYPES_NS}}}Override",
             {
-                "PartName": part_name,
+                "PartName": props_part_name,
                 "ContentType": CUSTOM_XML_PROPS_CONTENT_TYPE,
             },
         )
+    else:
+        props_override.set("ContentType", CUSTOM_XML_PROPS_CONTENT_TYPE)
 
-    return serialize(root)
+    result = serialize(root)
+    validate_content_types(result, CONTENT_TYPES_PART)
+    return result
+
+
+def relationship_source_part(rels_part):
+    marker = "/_rels/"
+    if marker not in rels_part or not rels_part.endswith(".rels"):
+        return None
+    directory, rel_name = rels_part.split(marker, 1)
+    return f"{directory}/{rel_name[:-5]}"
+
+
+def resolve_relationship_target(source_part, target):
+    if target.startswith("/"):
+        normalized = posixpath.normpath(target.lstrip("/"))
+    else:
+        normalized = posixpath.normpath(
+            posixpath.join(posixpath.dirname(source_part), target)
+        )
+    if normalized == ".." or normalized.startswith("../"):
+        return None
+    return normalized
+
+
+def find_custom_xml_props_owners(src, names, props_part):
+    owners = []
+    for rels_part in sorted(names):
+        if not (
+            rels_part.startswith("customXml/_rels/")
+            and rels_part.endswith(".xml.rels")
+        ):
+            continue
+        raw = src.read(rels_part)
+        if b"customXmlProps" not in raw and props_part.encode("utf-8") not in raw:
+            continue
+        source_part = relationship_source_part(rels_part)
+        if source_part is None:
+            continue
+        _, relationships = validate_relationships(
+            raw, f"{INSTALL_TEMPLATE}:{rels_part}"
+        )
+        for rel in relationships:
+            if (
+                rel.get("Type") == CUSTOM_XML_PROPS_REL_TYPE
+                and relationship_is_internal(rel)
+            ):
+                resolved = resolve_relationship_target(source_part, rel.get("Target"))
+                if resolved == props_part:
+                    owners.append(source_part)
+    return owners
 
 
 def check_existing_part_ownership(src, names):
@@ -478,12 +648,25 @@ def check_existing_part_ownership(src, names):
         CUSTOM_XML_RELS_PART,
     }
     existing_managed_parts = managed_parts.intersection(names)
+    props_owners = find_custom_xml_props_owners(src, names, CUSTOM_XML_PROPS_PART)
+
+    unrelated_owners = [owner for owner in props_owners if owner != CUSTOM_XML_PART]
+    if unrelated_owners:
+        raise RuntimeError(
+            f"{INSTALL_TEMPLATE}: {CUSTOM_XML_PROPS_PART} is referenced by unrelated "
+            f"Custom XML data ({', '.join(unrelated_owners)}); refusing to overwrite it"
+        )
 
     if CUSTOM_XML_PART not in names:
         if existing_managed_parts:
             raise RuntimeError(
                 f"{INSTALL_TEMPLATE}: found incomplete custom XML parts at the "
                 "paths reserved for Ribbon localization"
+            )
+        if props_owners:
+            raise RuntimeError(
+                f"{INSTALL_TEMPLATE}: {CUSTOM_XML_PROPS_PART} is already referenced; "
+                "refusing to create Ribbon localization parts at the reserved paths"
             )
         return
 
@@ -492,6 +675,29 @@ def check_existing_part_ownership(src, names):
         raise RuntimeError(
             f"{INSTALL_TEMPLATE}: {CUSTOM_XML_PART} is already used by unrelated "
             "Custom XML data; refusing to overwrite it"
+        )
+
+    if CUSTOM_XML_RELS_PART not in names or CUSTOM_XML_PROPS_PART not in names:
+        raise RuntimeError(
+            f"{INSTALL_TEMPLATE}: existing Ribbon localization Custom XML parts are incomplete"
+        )
+
+    try:
+        validate_item_rels(
+            src.read(CUSTOM_XML_RELS_PART),
+            f"{INSTALL_TEMPLATE}:{CUSTOM_XML_RELS_PART}",
+        )
+        validate_item_props(
+            src.read(CUSTOM_XML_PROPS_PART),
+            f"{INSTALL_TEMPLATE}:{CUSTOM_XML_PROPS_PART}",
+        )
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
+
+    if props_owners != [CUSTOM_XML_PART]:
+        raise RuntimeError(
+            f"{INSTALL_TEMPLATE}: {CUSTOM_XML_PROPS_PART} ownership is inconsistent; "
+            "refusing to overwrite it"
         )
 
 
@@ -571,6 +777,15 @@ def patch_template(custom_ui, localization_xml, item_props, item_rels):
                     built.read(CUSTOM_XML_RELS_PART),
                     f"{temp_path}:{CUSTOM_XML_RELS_PART}",
                 )
+                validate_document_rels(
+                    built.read(DOCUMENT_RELS_PART),
+                    f"{temp_path}:{DOCUMENT_RELS_PART}",
+                    require_localization=True,
+                )
+                validate_content_types(
+                    built.read(CONTENT_TYPES_PART),
+                    f"{temp_path}:{CONTENT_TYPES_PART}",
+                )
 
             shutil.move(str(temp_path), str(INSTALL_TEMPLATE))
         finally:
@@ -594,13 +809,16 @@ def check_xml_file(errors, path, expected, description):
         errors.append(f"missing: {path.relative_to(REPO_ROOT)}")
         return
     actual = path.read_bytes()
-    if not xml_semantically_equal(actual, expected):
-        errors.append(f"out of date or invalid: {path.relative_to(REPO_ROOT)}")
-        return
     try:
         if path == SOURCE_CUSTOM_XML:
+            if not xml_semantically_equal(actual, expected):
+                errors.append(f"out of date or invalid: {path.relative_to(REPO_ROOT)}")
+                return
             validate_localization_xml(actual, description)
         elif path == SOURCE_CUSTOM_XML_PROPS:
+            if not xml_semantically_equal(actual, expected):
+                errors.append(f"out of date or invalid: {path.relative_to(REPO_ROOT)}")
+                return
             validate_item_props(actual, description)
         elif path == SOURCE_CUSTOM_XML_RELS:
             validate_item_rels(actual, description)
@@ -661,6 +879,11 @@ def check(localization_xml, item_props, item_rels):
                 if name not in names:
                     errors.append(f"install/Zotero.dotm is missing {name}")
 
+            try:
+                check_existing_part_ownership(zf, names)
+            except (RuntimeError, ValueError) as exc:
+                errors.append(str(exc))
+
             if CUSTOM_UI_PART in names:
                 if not xml_semantically_equal(
                     zf.read(CUSTOM_UI_PART),
@@ -695,36 +918,21 @@ def check(localization_xml, item_props, item_rels):
                     errors.append(str(exc))
 
             if CUSTOM_XML_RELS_PART in names:
-                actual = zf.read(CUSTOM_XML_RELS_PART)
-                if not xml_semantically_equal(actual, item_rels):
-                    errors.append(
-                        "install/Zotero.dotm has out-of-date Custom XML relationships"
-                    )
                 try:
                     validate_item_rels(
-                        actual, "install/Zotero.dotm Custom XML relationships"
+                        zf.read(CUSTOM_XML_RELS_PART),
+                        "install/Zotero.dotm Custom XML relationships",
                     )
                 except ValueError as exc:
                     errors.append(str(exc))
 
             if DOCUMENT_RELS_PART in names:
                 try:
-                    rels = parse_xml(
+                    validate_document_rels(
                         zf.read(DOCUMENT_RELS_PART),
                         "install/Zotero.dotm document relationships",
+                        require_localization=True,
                     )
-                    target = "../" + CUSTOM_XML_PART
-                    matches = [
-                        rel
-                        for rel in rels.findall(f"{{{REL_NS}}}Relationship")
-                        if rel.get("Type") == CUSTOM_XML_REL_TYPE
-                        and rel.get("Target") == target
-                    ]
-                    if len(matches) != 1:
-                        errors.append(
-                            "install/Zotero.dotm must contain exactly one "
-                            "Ribbon localization document relationship"
-                        )
                     if CUSTOM_XML_PART not in names:
                         errors.append(
                             "install/Zotero.dotm Ribbon localization relationship "
@@ -735,55 +943,32 @@ def check(localization_xml, item_props, item_rels):
 
             if CONTENT_TYPES_PART in names:
                 try:
-                    types = parse_xml(
+                    validate_content_types(
                         zf.read(CONTENT_TYPES_PART),
                         "install/Zotero.dotm content types",
                     )
-                    xml_defaults = [
-                        node
-                        for node in types.findall(f"{{{CONTENT_TYPES_NS}}}Default")
-                        if node.get("Extension", "").lower() == "xml"
-                        and node.get("ContentType") == "application/xml"
-                    ]
-                    if len(xml_defaults) != 1:
-                        errors.append(
-                            "install/Zotero.dotm must map the xml extension "
-                            "to application/xml exactly once"
-                        )
-
-                    part_name = "/" + CUSTOM_XML_PROPS_PART
-                    overrides = [
-                        node
-                        for node in types.findall(f"{{{CONTENT_TYPES_NS}}}Override")
-                        if node.get("PartName") == part_name
-                        and node.get("ContentType") == CUSTOM_XML_PROPS_CONTENT_TYPE
-                    ]
-                    if len(overrides) != 1:
-                        errors.append(
-                            "install/Zotero.dotm is missing or duplicates the "
-                            "Custom XML properties content type"
-                        )
                 except ValueError as exc:
                     errors.append(str(exc))
 
             if CUSTOM_XML_RELS_PART in names:
                 try:
-                    rels = validate_item_rels(
+                    _, relationships = validate_relationships(
                         zf.read(CUSTOM_XML_RELS_PART),
                         "install/Zotero.dotm Custom XML relationships",
                     )
-                    targets = [
-                        rel.get("Target")
-                        for rel in rels.findall(f"{{{REL_NS}}}Relationship")
-                        if rel.get("Type") == CUSTOM_XML_PROPS_REL_TYPE
-                    ]
-                    for target in targets:
-                        target_path = "customXml/" + target
-                        if target_path not in names:
-                            errors.append(
-                                "install/Zotero.dotm Custom XML properties "
-                                f"relationship target is missing: {target_path}"
+                    for rel in relationships:
+                        if (
+                            rel.get("Type") == CUSTOM_XML_PROPS_REL_TYPE
+                            and relationship_is_internal(rel)
+                        ):
+                            target_path = resolve_relationship_target(
+                                CUSTOM_XML_PART, rel.get("Target")
                             )
+                            if not target_path or target_path not in names:
+                                errors.append(
+                                    "install/Zotero.dotm Custom XML properties "
+                                    f"relationship target is missing: {target_path}"
+                                )
                 except ValueError:
                     pass
 
