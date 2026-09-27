@@ -137,6 +137,8 @@ Private Function ZoteroRibbonLookupText(controlID As String, textType As String)
     Dim defaultLocale As String
     Dim xpath As String
 
+    On Error GoTo LookupFailed
+
     Set localizationPart = ZoteroRibbonGetLocalizationPart()
     If localizationPart Is Nothing Then Exit Function
 
@@ -163,6 +165,10 @@ Private Function ZoteroRibbonLookupText(controlID As String, textType As String)
     If Not textNode Is Nothing Then
         ZoteroRibbonLookupText = textNode.Text
     End If
+    Exit Function
+
+LookupFailed:
+    ZoteroRibbonLookupText = ""
 End Function
 
 Private Function ZoteroRibbonFallbackText(control As IRibbonControl, partIndex As Long) As String
@@ -176,17 +182,35 @@ Private Function ZoteroRibbonFallbackText(control As IRibbonControl, partIndex A
 End Function
 
 Sub ZoteroRibbonGetLabel(control As IRibbonControl, ByRef returnedVal)
-    returnedVal = ZoteroRibbonLookupText(control.Id, "label")
-    If Len(returnedVal) = 0 Then
-        returnedVal = ZoteroRibbonFallbackText(control, 0)
+    Dim localizedText As String
+
+    returnedVal = ""
+    On Error Resume Next
+    returnedVal = ZoteroRibbonFallbackText(control, 0)
+    On Error GoTo LocalizationFailed
+
+    localizedText = ZoteroRibbonLookupText(control.Id, "label")
+    If Len(localizedText) > 0 Then
+        returnedVal = localizedText
     End If
+
+LocalizationFailed:
 End Sub
 
 Sub ZoteroRibbonGetSupertip(control As IRibbonControl, ByRef returnedVal)
-    returnedVal = ZoteroRibbonLookupText(control.Id, "supertip")
-    If Len(returnedVal) = 0 Then
-        returnedVal = ZoteroRibbonFallbackText(control, 1)
+    Dim localizedText As String
+
+    returnedVal = ""
+    On Error Resume Next
+    returnedVal = ZoteroRibbonFallbackText(control, 1)
+    On Error GoTo LocalizationFailed
+
+    localizedText = ZoteroRibbonLookupText(control.Id, "supertip")
+    If Len(localizedText) > 0 Then
+        returnedVal = localizedText
     End If
+
+LocalizationFailed:
 End Sub
 
 Sub ZoteroTabLabel(tb As IRibbonControl, ByRef returnedVal)
